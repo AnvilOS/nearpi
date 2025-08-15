@@ -427,12 +427,27 @@
  * Global macro definitions.
  */
 
-# define hex( double )  *(1 + ((long *) &double)), *((long *) &double)
+#include <stdio.h>
+#include <string.h>
+#include <math.h>
+
+# define hex( double )  *(1 + ((unsigned *) &double)), *((unsigned *) &double)
 # define sgn(a)         (a >= 0 ? 1 : -1)
-# define MAX_k          2500
-# define D              56
-# define MAX_EXP        127
+# define MAX_k          30000
+
+#if 1
+# define D              53
+# define MAX_EXP        1024
 # define THRESHOLD      2.22e-16
+#else
+# define D              24
+# define MAX_EXP        128
+# define THRESHOLD      1.19e-7
+#endif
+
+double dbleCF (double i[], double j[]);
+void input(double i[]);
+void nearPiOver2 (double  i[]);
 
 /*
  *  Global Variables
@@ -443,13 +458,14 @@ int     CFlength,               /* length of CF including terminator */
 double  e,
         f;                      /* [e,f] range of D-bit unsigned int of f;
                                    form 1X...X */
-
+double smallest = 1e10;
+double z_for_smallest;
 
 /*
  *  This is the start of the main program.
  */
 
-main ()
+int main (int argc, char *argv[])
 {
     int     k;                  /* subscript variable */
     double  i[MAX_k],
@@ -508,7 +524,7 @@ main ()
  *  because the alternation of source & destination are no longer necessary. ]
  */
 
-    binade = 1;
+    binade = 0;
     while (binade < MAX_EXP)
     {
 
@@ -548,6 +564,7 @@ main ()
         CFlength = dbleCF (j, i);
         binade = binade + 1;
     }
+    printf("Smallest was x=%23.16E at %23.16E\n", smallest, z_for_smallest);
 }                               /* end of Main Program */
 
 /*
@@ -574,15 +591,13 @@ main ()
  *  half of L to L0.
  */
 
-dbleCF (i, j)
-double  i[],
-        j[];
+double dbleCF (double i[], double j[])
 {
-    register double k,
+    double k,
                     l,
                     l0,
                     j0;
-    register int    n,
+    int    n,
                     m;
     n = 1;
     m = 0;
@@ -606,9 +621,10 @@ double  i[],
             m = m + 2;
         };
         if (l == 0)
-/*
- *  Even case.
- */
+        {
+            /*
+             *  Even case.
+             */
             if (k < 0)
             {
                 m = m - 1;
@@ -621,6 +637,7 @@ double  i[],
                 l = i[n];
                 continue;
             };
+        }
 /*
  *  Odd case.
  */
@@ -677,8 +694,7 @@ double  i[],
  *  doubling the appropriate number of times.
  */
 
-input (i)
-double  i[];
+void input (double  i[])
 {
     int     k;
     double  j[MAX_k];
@@ -688,29 +704,44 @@ double  i[];
  *  until a negative value is encountered.
  */
 
+    FILE *f;
+    f = fopen("cfpi.txt", "r");
     k = -1;
     do
     {
         k = k + 1;
-        scanf ("%E", &i[k]);
+        char line[999];
+        if (fgets(line, 1000, f) == NULL)
+        {
+            break;
+        }
+        sscanf(line, "%lE\n", &i[k]);
     } while (i[k] >= 0);
 
 /*
- *  Double the continued fraction for  pi  D-3  times using
+ *  Double the continued fraction for  pi  D-2  times using
  *  i  and  j  alternately as source and destination.  On my
- *  machine  D = 56  so  D-3  is odd; hence the following code:
+ *  machine  D = 56  so  D-2  is even; hence the following code:
  *
- *  Double twice  (D-3)/2  times,
+ *  Double twice  (D-2)/2  times,
  */
-    for (k = 1; k <= (D - 3) / 2; k = k + 1)
+    for (k = 1; k <= (D - 2) / 2; k = k + 1)
     {
         dbleCF (i, j);
         dbleCF (j, i);
     };
 /*
- *  then double once more.
+ *  then double once more, but only if D is odd
+ *  make sure result is left in j
  */
-    dbleCF (i, j);
+    if ((D % 2) == 0)
+    {
+        memcpy(j, i, sizeof(j));
+    }
+    else
+    {
+        dbleCF (i, j);
+    }
 
 /*
  *  Now append a zero on the front (reciprocate the continued
@@ -739,8 +770,7 @@ double  i[];
  *  values near a integer multiple of  pi/2  in the current binade.
  */
 
-nearPiOver2 (i)
-double  i[];
+void nearPiOver2 (double  i[])
 {
     int     k,                  /* subscript for recurrences    (see
                                    handout) */
@@ -768,16 +798,16 @@ double  i[];
                                 */
             m0,                 /* the mantissa of z as a D-bit integer   
                                 */
-            x,                  /* the reduced argument         (see
+            x;                  /* the reduced argument         (see
                                    handout) */
-            ldexp (),           /* sys routine to multiply by a power of
-                                   two  */
-            fabs (),            /* sys routine to compute FP absolute
-                                   value   */
-            floor (),           /* sys routine to compute greatest int <=
-                                   value   */
-            ceil ();            /* sys routine to compute least int >=
-                                   value   */
+//            ldexp (),           /* sys routine to multiply by a power of
+//                                   two  */
+//            fabs (),            /* sys routine to compute FP absolute
+//                                   value   */
+//            floor (),           /* sys routine to compute greatest int <=
+//                                   value   */
+//            ceil ();            /* sys routine to compute least int >=
+//                                   value   */
 
  /* 
   *  Compute the q's by evaluating the continued fraction from
@@ -786,7 +816,7 @@ double  i[];
   *  Start evaluation with a big number in the terminator position.
   */
 
-    q[CFlength] = 1.0E + 30;
+    q[CFlength] = 1.0E0 + 30;
 
     for (k = CFlength - 1; k >= 0; k = k - 1)
         q[k] = i[k] + 1 / q[k + 1];
@@ -907,6 +937,12 @@ double  i[];
  *  Set  z = m0 * 2 ^ (binade+1-D) .
  */
                 z = ldexp (m0, binade + 1 - D);
+                
+                if (fabs(x) < smallest)
+                {
+                    smallest = fabs(x);
+                    z_for_smallest = z;
+                }
 
 /*
  *  Print  z (hex),  z (dec),  m0 (dec),  binade+1-D,  x (hex), x (dec).
